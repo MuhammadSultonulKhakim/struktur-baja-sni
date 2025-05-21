@@ -27,7 +27,7 @@ def get_gsheet_client():
 
     try:
         # 1. Cek secrets dari Streamlit
-        if 'google_credentials' in st.secrets:
+        if 'gcp_service_account' in st.secrets:
             credentials = Credentials.from_service_account_info(
                 st.secrets['google_credentials'], scopes=scopes
             )
