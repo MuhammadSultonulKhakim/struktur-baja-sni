@@ -1,6 +1,0 @@
-streamlit
-pandas
-streamlit-aggrid
-gspread
-google-auth
-tenacity
