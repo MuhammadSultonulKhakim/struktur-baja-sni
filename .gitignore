@@ -1,0 +1,15 @@
+GCP_CREDENTIALS_JSON="""
+{
+  "type": "service_account",
+  "project_id": "struktur-sni-baja",
+  "private_key_id": "8f7825335294f7d033754b200d9f263758b7c35b",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCv7NsS5j1F/6vs\njvmxlJL0+M7FNsoT3UF5m3EggHLmvtYgOnRzdQXGjeQQajbtbm9wcGS4K4P5irr3\nBTTPhmGSkfkeifZ6Z+WH0GCnOoSj39VZ38QWFVpslUNGT5MMZXV6P3S+BeUDY+bQ\nTHyubrJmKYYgrTzXu7slmWV0YKqUAEABPmk0luggKPUhhCJdd63UE3zFeiD2eOqW\n4S2JkWiPv0AMjBkCl/Z1C9xlezJTller7Xqo/xUlgEA5Rl9Zs7F89QAsQJo20iQF\nQAiedwSbpfFFY1WzW3N3WklxYr0gssPgdC08XVBgwNUCoUvY0nMLAkTv+du2FhbI\n4KGbClSLAgMBAAECggEAOI3f7zdswy/pyOY9hsTIaVACyItQcwpRnhJGT7h7N4pp\ns3qXLPaVoLrEcjJy7ejukirPdhUnG/VpHTfjPkNo4oFioFqhjcAQnZRzPc8mDLhM\nEdRJaP/8TaO+OMAj+Xw0Q9RaZyvl7y0SaivsePbFCuqWX7LROFj1VKT3ZG4e5+yT\n2ntTPWtLpSgwpOT9OodMjcf46eoMERT4D+iJefPNXsq+FhgZmQbR411/q8FIZF0g\nGmuSCf6C0x2x+FCp0E8C0/K3Jq/jGtR2/avJXhc6ZoBgMrBwYZZUpe3alnnQLJNq\naCzCy6l1prC/MlocGvTb8/n/UgglOqx/dbjL5mpVAQKBgQDkDK7Wbmz72cyenakN\nmIjE/YrPz1ZzAzTLTLOoGfSP3vncWC0IWseGWqGTwd3Cj51X+ZevFwoo3/nDzdVj\nQW+mhllck9D0QkpRsugSeUQOEYz6BRaCNJSejqcpC9dfKh1yP6J2zjxie0g1dtYm\nbdIdaVkSpDmBX3c/6MOwY613awKBgQDFfLZKS7K7UxjaXa5vttTeX/sntqyr62Es\nf+DnWAYhzwzgRI3sbnSvjdu9CB4XSQiL7Roab68Re52oPI35zG7G1RnHWfFBNq/A\nmolCF2Nd/1izwDguNxnFvcBjqUtSm/1L2WeriaK8akc31cD1POmZ0D+7s1WHdSv2\nAQPkJrZ/YQKBgEziVcOngQi72jeTsd4KkfnP/Q+ouF2YNCFiX6OJ9KDYrOZzt+L8\nMA6E2bql/qzMnGB/nnsCSoOTV3KDH7ER66F55ADJOQZQnxvCNGmeBqqzkhLsyjTl\no0F9mK/G9Tp5SWouOAjT6RnOtH6J7RMRrWgLD2OwiE6sr9iVEfyS7nW3AoGAS8iA\nt1/3FVVc+ybp8mqpozAX0/SQrGRl5Mqpxn0L1Vt76G/GOo1kb52zTgXYbj0Tb4ar\n9qsW9lGGfXHHVa1ycRCDlPFZ2BmhNfrXYypQclizdD72EB4K4MvhER19DxVXDQ0/\ncB8f+MebzrxTEIiwZ9r3KhM2ZgW7uepH0PxeGeECgYB/yIcCWfcsUwYQWKYvIhbG\nBv6kToVOoLpdcLmyozyy+GXyEiVilcolZfnCLwjlVLEo4WXJK/k7stirLrOiFgoQ\nX/aGAHS75vAbVw5R+Wb04b0ZS4p0LZWQBmsesaRJpNWsLKP9BiRzS3FDihXawlyj\njypyvEfXztTGEKlF81no/w==\n-----END PRIVATE KEY-----\n",
+  "client_email": "struktur-baja-sni@struktur-sni-baja.iam.gserviceaccount.com",
+  "client_id": "100391346862569581157",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/struktur-baja-sni%40struktur-sni-baja.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
+"""
