@@ -11,7 +11,6 @@ import json
 
 # ========== HALAMAN DAN STATE SETUP ==========
 st.set_page_config(page_title="Perhitungan Struktur Baja WF", layout="wide")
-st.write(st.secrets["gcp_service_account"])  # debug output
 st.title("Perhitungan Struktur Baja WF")
 
 # ========== SETUP GOOGLE SHEETS CLIENT ==========
