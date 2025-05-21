@@ -9,6 +9,8 @@ import time
 import os
 import json
 
+st.write(st.secrets["gcp_service_account"])  # debug output
+
 # ========== HALAMAN DAN STATE SETUP ==========
 st.set_page_config(page_title="Perhitungan Struktur Baja WF", layout="wide")
 st.title("Perhitungan Struktur Baja WF")
@@ -79,7 +81,7 @@ def load_all_sheet_data():
     Load all necessary data from Google Sheets
     """
     client_func = get_gsheet_client
-    spreadsheet_key = '17TSibAziP_oLHo0jMynpb1LZc7yfWQs78hb-Z5DOaNE'
+    spreadsheet_key = "17TSibAziP_oLHo0jMynpb1LZc7yfWQs78hb-Z5DOaNE"
     
     with st.spinner("Memuat data..."):
         try:
