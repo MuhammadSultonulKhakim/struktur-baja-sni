@@ -12,7 +12,13 @@ import json
 # ========== HALAMAN DAN STATE SETUP ==========
 st.set_page_config(page_title="Perhitungan Struktur Baja WF", layout="wide")
 st.title("Perhitungan Struktur Baja WF")
-st.write(st.secrets['gcp_service_account'].keys())
+try:
+    creds = st.secrets["gcp_service_account"]
+    st.write("✅ Credentials loaded successfully")
+    st.write(f"Project ID: {creds['project_id']}")
+    st.write(f"Client Email: {creds['client_email']}")
+except Exception as e:
+    st.error(f"❌ Error loading credentials: {e}")
 # ========== SETUP GOOGLE SHEETS CLIENT ==========
 @st.cache_resource
 def get_gsheet_client():
