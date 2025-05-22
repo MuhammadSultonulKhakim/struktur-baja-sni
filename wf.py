@@ -18,7 +18,7 @@ st.title("Perhitungan Struktur Baja WF")
 def get_gsheet_client():
     """
     Create and return an authenticated Google Sheets client using service account credentials.
-    Fixed version for Streamlit Cloud deployment.
+    Fixed version with better error handling and validation.
     """
     scopes = [
         'https://www.googleapis.com/auth/spreadsheets',
@@ -29,58 +29,154 @@ def get_gsheet_client():
         # Method 1: Streamlit Secrets (Primary method for Streamlit Cloud)
         if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
             st.write("🔑 Using Streamlit secrets for authentication")
+            
+            # Get credentials info and validate
+            creds_info = st.secrets['gcp_service_account']
+            
+            # Debug: Show available keys (without sensitive data)
+            st.write(f"📋 Available credential keys: {list(creds_info.keys())}")
+            
+            # Validate required fields
+            required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 
+                             'client_email', 'client_id', 'auth_uri', 'token_uri']
+            missing_fields = [field for field in required_fields if field not in creds_info]
+            
+            if missing_fields:
+                st.error(f"❌ Missing required credential fields: {missing_fields}")
+                st.error("Please ensure your service account JSON contains all required fields.")
+                return None
+            
+            # Check if private_key format is correct
+            private_key = creds_info['private_key']
+            if not private_key.startswith('-----BEGIN PRIVATE KEY-----'):
+                st.error("❌ Invalid private key format. Make sure it starts with '-----BEGIN PRIVATE KEY-----'")
+                st.error("If you copied from JSON, ensure the \\n characters are actual line breaks.")
+                return None
+            
+            # Convert secrets to regular dict for credentials
+            creds_dict = dict(creds_info)
+            
+            # Create credentials
             credentials = Credentials.from_service_account_info(
-                st.secrets['gcp_service_account'], 
+                creds_dict, 
                 scopes=scopes
             )
+            
+            # Create client
             client = gspread.authorize(credentials)
-            # Test the connection
+            
+            # Test the connection with a simple operation
             try:
-                client.list_spreadsheet_files()
-                st.success("✅ Successfully connected to Google Sheets")
+                # Try to list spreadsheets (this validates the connection)
+                files = client.list_spreadsheet_files()
+                st.success(f"✅ Successfully connected to Google Sheets! Found {len(files)} accessible spreadsheets.")
                 return client
+                
             except Exception as test_error:
                 st.error(f"❌ Connection test failed: {str(test_error)}")
+                
+                # Provide specific troubleshooting based on error
+                error_str = str(test_error).lower()
+                if 'invalid_grant' in error_str:
+                    st.error("**Invalid Grant Error Solutions:**")
+                    st.error("1. Check if your service account JSON is correctly formatted")
+                    st.error("2. Ensure the private_key field has proper line breaks (not \\n)")
+                    st.error("3. Verify the service account email is correct")
+                    st.error("4. Make sure the service account key hasn't expired")
+                elif 'forbidden' in error_str or 'permission' in error_str:
+                    st.error("**Permission Error Solutions:**")
+                    st.error("1. Share your Google Sheet with the service account email")
+                    st.error("2. Enable Google Sheets API in Google Cloud Console")
+                    st.error("3. Verify service account has proper IAM roles")
+                elif 'not found' in error_str:
+                    st.error("**API Not Found Error Solutions:**")
+                    st.error("1. Enable Google Sheets API in Google Cloud Console")
+                    st.error("2. Enable Google Drive API in Google Cloud Console")
+                
                 return None
 
         # Method 2: Environment Variable JSON (Backup method)
         elif 'GOOGLE_APPLICATION_CREDENTIALS_JSON' in os.environ:
             st.write("🔑 Using environment variable for authentication")
-            creds_info = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS_JSON'])
-            credentials = Credentials.from_service_account_info(creds_info, scopes=scopes)
-            client = gspread.authorize(credentials)
-            return client
+            try:
+                creds_info = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS_JSON'])
+                credentials = Credentials.from_service_account_info(creds_info, scopes=scopes)
+                client = gspread.authorize(credentials)
+                return client
+            except json.JSONDecodeError:
+                st.error("❌ Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
+                return None
 
         # Method 3: Service Account File Path (Local development)
         elif 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
             st.write("🔑 Using service account file for authentication")
-            credentials = Credentials.from_service_account_file(
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'], 
-                scopes=scopes
-            )
-            client = gspread.authorize(credentials)
-            return client
+            try:
+                credentials = Credentials.from_service_account_file(
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'], 
+                    scopes=scopes
+                )
+                client = gspread.authorize(credentials)
+                return client
+            except FileNotFoundError:
+                st.error("❌ Service account file not found")
+                return None
 
         else:
             st.error("❌ No Google credentials found!")
-            st.error("Please check your Streamlit secrets configuration.")
-            
-            # Debug information
-            st.write("**Debug Information:**")
-            st.write(f"- Streamlit secrets available: {hasattr(st, 'secrets')}")
-            if hasattr(st, 'secrets'):
-                st.write(f"- Available secrets keys: {list(st.secrets.keys())}")
-            st.write(f"- Environment variables: {list(os.environ.keys())}")
+            st.error("**Setup Instructions:**")
+            st.error("1. Go to Google Cloud Console")
+            st.error("2. Create a service account")
+            st.error("3. Download the JSON key file")
+            st.error("4. Add the entire JSON content to Streamlit secrets as 'gcp_service_account'")
+            st.error("5. Share your Google Sheet with the service account email")
             
             return None
 
     except Exception as e:
         st.error(f"❌ Authentication failed: {str(e)}")
-        st.error("**Possible solutions:**")
-        st.error("1. Check if your service account JSON is correctly formatted")
-        st.error("2. Verify your service account has proper permissions")
-        st.error("3. Make sure your spreadsheet is shared with the service account email")
+        
+        # More specific error handling
+        if "private_key" in str(e).lower():
+            st.error("**Private Key Issue:**")
+            st.error("- Ensure your private key is properly formatted")
+            st.error("- Check that \\n characters are actual line breaks")
+            st.error("- Verify the key starts and ends with proper markers")
+        
+        st.error("**General Solutions:**")
+        st.error("1. Re-download your service account JSON from Google Cloud Console")
+        st.error("2. Copy the entire JSON content exactly as-is to Streamlit secrets")
+        st.error("3. Make sure your service account has the necessary permissions")
+        st.error("4. Verify your spreadsheet is shared with the service account email")
+        
         return None
+
+# Helper function to validate credentials format
+def validate_service_account_json(creds_dict):
+    """Validate service account JSON structure and format"""
+    required_fields = [
+        'type', 'project_id', 'private_key_id', 'private_key', 
+        'client_email', 'client_id', 'auth_uri', 'token_uri'
+    ]
+    
+    # Check for missing fields
+    missing = [field for field in required_fields if field not in creds_dict]
+    if missing:
+        return False, f"Missing fields: {missing}"
+    
+    # Validate private key format
+    private_key = creds_dict.get('private_key', '')
+    if not private_key.startswith('-----BEGIN PRIVATE KEY-----'):
+        return False, "Private key must start with '-----BEGIN PRIVATE KEY-----'"
+    
+    if not private_key.endswith('-----END PRIVATE KEY-----\n'):
+        return False, "Private key must end with '-----END PRIVATE KEY-----'"
+    
+    # Validate email format
+    client_email = creds_dict.get('client_email', '')
+    if '@' not in client_email or not client_email.endswith('.iam.gserviceaccount.com'):
+        return False, "Invalid service account email format"
+    
+    return True, "Valid"
 
 # Improved retry function with better error handling
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
@@ -106,17 +202,25 @@ def fetch_sheet_data(client_func, spreadsheet_key, worksheet_name=None, range_na
         else:
             return spreadsheet
             
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error("❌ Spreadsheet not found. Please check the spreadsheet ID and permissions.")
+        raise
+    except gspread.exceptions.WorksheetNotFound as e:
+        st.error(f"❌ Worksheet '{worksheet_name}' not found in the spreadsheet.")
+        raise
     except gspread.exceptions.APIError as e:
         if 'RATE_LIMIT_EXCEEDED' in str(e):
             st.warning("⚠️ Rate limit exceeded, waiting before retry...")
             time.sleep(5)
+        elif 'PERMISSION_DENIED' in str(e):
+            st.error("❌ Permission denied. Make sure the spreadsheet is shared with your service account.")
         raise e
     except Exception as e:
         st.error(f"❌ Error fetching data: {str(e)}")
         raise
 
 # ========== LOAD SEMUA DATA SEKALIGUS DI AWAL ==========
-@st.cache_data(ttl=1800)  # Cache for 30 minutes instead of 1 hour
+@st.cache_data(ttl=1800)  # Cache for 30 minutes
 def load_all_sheet_data():
     """
     Load all necessary data from Google Sheets with improved error handling
@@ -157,12 +261,42 @@ def load_all_sheet_data():
             
         except Exception as e:
             st.error(f"❌ Error loading sheet data: {str(e)}")
-            st.error("**Troubleshooting steps:**")
-            st.error("1. Check your internet connection")
-            st.error("2. Verify the spreadsheet ID is correct")
-            st.error("3. Ensure the worksheet names exist")
-            st.error("4. Check if the service account has access to the spreadsheet")
+            
+            # Provide specific troubleshooting based on error type
+            error_str = str(e).lower()
+            if 'permission' in error_str or 'forbidden' in error_str:
+                st.error("**Permission Issue:**")
+                st.error("1. Share the Google Sheet with your service account email")
+                st.error("2. Make sure the service account has 'Editor' access")
+                st.error("3. Check if the spreadsheet ID is correct")
+            elif 'not found' in error_str:
+                st.error("**Not Found Issue:**")
+                st.error("1. Verify the spreadsheet ID is correct")
+                st.error("2. Check if the worksheet names exist ('Tabel WF', 'WF')")
+                st.error("3. Ensure the spreadsheet hasn't been deleted or moved")
+            elif 'rate limit' in error_str:
+                st.error("**Rate Limit Issue:**")
+                st.error("1. Wait a few minutes before trying again")
+                st.error("2. The application will automatically retry")
+            else:
+                st.error("**General Troubleshooting:**")
+                st.error("1. Check your internet connection")
+                st.error("2. Verify Google Sheets API is enabled")
+                st.error("3. Ensure service account credentials are valid")
+            
             raise
+
+# Show credential validation if in debug mode
+if st.sidebar.button("🔍 Validate Credentials"):
+    if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
+        creds_info = dict(st.secrets['gcp_service_account'])
+        is_valid, message = validate_service_account_json(creds_info)
+        if is_valid:
+            st.sidebar.success(f"✅ Credentials format: {message}")
+        else:
+            st.sidebar.error(f"❌ Credentials issue: {message}")
+    else:
+        st.sidebar.error("❌ No credentials found in secrets")
 
 # Load all data at startup with better error handling
 try:
@@ -203,11 +337,44 @@ try:
         
 except Exception as e:
     st.error(f"💥 Critical error during initialization: {str(e)}")
-    st.error("**Please check the following:**")
-    st.error("1. Your Streamlit secrets are correctly configured")
-    st.error("2. Your service account has the necessary permissions")
-    st.error("3. The Google Sheets API is enabled in your Google Cloud project")
-    st.error("4. Your internet connection is stable")
+    
+    # Provide step-by-step setup instructions
+    with st.expander("📋 Step-by-Step Setup Instructions"):
+        st.markdown("""
+        ### Google Sheets API Setup:
+        
+        1. **Create a Google Cloud Project:**
+           - Go to [Google Cloud Console](https://console.cloud.google.com)
+           - Create a new project or select existing one
+        
+        2. **Enable APIs:**
+           - Enable Google Sheets API
+           - Enable Google Drive API
+        
+        3. **Create Service Account:**
+           - Go to IAM & Admin > Service Accounts
+           - Create new service account
+           - Download JSON key file
+        
+        4. **Configure Streamlit Secrets:**
+           - Copy the entire JSON content
+           - Add to `.streamlit/secrets.toml` as:
+           ```toml
+           [gcp_service_account]
+           type = "service_account"
+           project_id = "your-project-id"
+           private_key_id = "your-private-key-id"
+           private_key = "-----BEGIN PRIVATE KEY-----\\nYOUR_PRIVATE_KEY\\n-----END PRIVATE KEY-----\\n"
+           client_email = "your-service-account@your-project.iam.gserviceaccount.com"
+           client_id = "your-client-id"
+           auth_uri = "https://accounts.google.com/o/oauth2/auth"
+           token_uri = "https://oauth2.googleapis.com/token"
+           ```
+        
+        5. **Share Google Sheet:**
+           - Share your Google Sheet with the service account email
+           - Grant "Editor" permissions
+        """)
     
     # Show debug button
     if st.button("🔍 Show Debug Information"):
@@ -216,6 +383,13 @@ except Exception as e:
         st.write(f"Available environment variables: {sorted(os.environ.keys())}")
         if hasattr(st, 'secrets'):
             st.write(f"Streamlit secrets keys: {list(st.secrets.keys())}")
+            if 'gcp_service_account' in st.secrets:
+                creds = st.secrets['gcp_service_account']
+                st.write("**Service Account Info:**")
+                st.write(f"- Client Email: {creds.get('client_email', 'Not found')}")
+                st.write(f"- Project ID: {creds.get('project_id', 'Not found')}")
+                st.write(f"- Private Key Length: {len(creds.get('private_key', ''))}")
+                st.write(f"- Has all required fields: {all(field in creds for field in ['type', 'project_id', 'private_key', 'client_email'])}")
     
     st.stop()
 
