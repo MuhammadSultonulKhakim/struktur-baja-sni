@@ -18,7 +18,7 @@ st.title("Perhitungan Struktur Baja WF")
 def get_gsheet_client():
     """
     Create and return an authenticated Google Sheets client using service account credentials.
-    Now fully supports deployment to Streamlit Cloud.
+    Fixed version for Streamlit Cloud deployment.
     """
     scopes = [
         'https://www.googleapis.com/auth/spreadsheets',
@@ -26,82 +26,147 @@ def get_gsheet_client():
     ]
 
     try:
-        # 1. Cek secrets dari Streamlit
-        if 'gcp_service_account' in st.secrets:
+        # Method 1: Streamlit Secrets (Primary method for Streamlit Cloud)
+        if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
+            st.write("🔑 Using Streamlit secrets for authentication")
             credentials = Credentials.from_service_account_info(
-                st.secrets['gcp_service_account'], scopes=scopes
+                st.secrets['gcp_service_account'], 
+                scopes=scopes
             )
-            return gspread.authorize(credentials)
+            client = gspread.authorize(credentials)
+            # Test the connection
+            try:
+                client.list_spreadsheet_files()
+                st.success("✅ Successfully connected to Google Sheets")
+                return client
+            except Exception as test_error:
+                st.error(f"❌ Connection test failed: {str(test_error)}")
+                return None
 
-        # 2. Cek environment variable (jika pakai deploy alternatif)
+        # Method 2: Environment Variable JSON (Backup method)
         elif 'GOOGLE_APPLICATION_CREDENTIALS_JSON' in os.environ:
+            st.write("🔑 Using environment variable for authentication")
             creds_info = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS_JSON'])
             credentials = Credentials.from_service_account_info(creds_info, scopes=scopes)
-            return gspread.authorize(credentials)
+            client = gspread.authorize(credentials)
+            return client
 
-        # 3. Gagal: tidak ditemukan
+        # Method 3: Service Account File Path (Local development)
+        elif 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+            st.write("🔑 Using service account file for authentication")
+            credentials = Credentials.from_service_account_file(
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'], 
+                scopes=scopes
+            )
+            client = gspread.authorize(credentials)
+            return client
+
         else:
-            raise RuntimeError("Tidak ditemukan kredensial Google di secrets atau environment variable.")
+            st.error("❌ No Google credentials found!")
+            st.error("Please check your Streamlit secrets configuration.")
+            
+            # Debug information
+            st.write("**Debug Information:**")
+            st.write(f"- Streamlit secrets available: {hasattr(st, 'secrets')}")
+            if hasattr(st, 'secrets'):
+                st.write(f"- Available secrets keys: {list(st.secrets.keys())}")
+            st.write(f"- Environment variables: {list(os.environ.keys())}")
+            
+            return None
 
     except Exception as e:
-        st.error(f"Autentikasi gagal: {str(e)}")
+        st.error(f"❌ Authentication failed: {str(e)}")
+        st.error("**Possible solutions:**")
+        st.error("1. Check if your service account JSON is correctly formatted")
+        st.error("2. Verify your service account has proper permissions")
+        st.error("3. Make sure your spreadsheet is shared with the service account email")
         return None
 
-# Fungsi retry dengan exponential backoff yang lebih robust
+# Improved retry function with better error handling
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def fetch_sheet_data(client_func, spreadsheet_key, worksheet_name=None, range_name=None):
     """
-    Fetch data from Google Sheets with retry logic
+    Fetch data from Google Sheets with improved retry logic and error handling
     """
     client = client_func()
     if client is None:
-        st.error("Tidak dapat terhubung ke Google Sheets.")
-        st.stop()
+        raise Exception("Cannot connect to Google Sheets client")
     
     try:
+        # Open spreadsheet
         spreadsheet = client.open_by_key(spreadsheet_key)
         
         if worksheet_name and range_name:
             worksheet = spreadsheet.worksheet(worksheet_name)
-            return worksheet.get(range_name)
+            data = worksheet.get(range_name)
+            return data
         elif worksheet_name:
             worksheet = spreadsheet.worksheet(worksheet_name)
             return worksheet
         else:
             return spreadsheet
+            
+    except gspread.exceptions.APIError as e:
+        if 'RATE_LIMIT_EXCEEDED' in str(e):
+            st.warning("⚠️ Rate limit exceeded, waiting before retry...")
+            time.sleep(5)
+        raise e
     except Exception as e:
-        st.error(f"Error fetching data: {str(e)}")
+        st.error(f"❌ Error fetching data: {str(e)}")
         raise
 
 # ========== LOAD SEMUA DATA SEKALIGUS DI AWAL ==========
-@st.cache_data(ttl=3600)  # Cache selama 1 jam
+@st.cache_data(ttl=1800)  # Cache for 30 minutes instead of 1 hour
 def load_all_sheet_data():
     """
-    Load all necessary data from Google Sheets
+    Load all necessary data from Google Sheets with improved error handling
     """
     client_func = get_gsheet_client
     spreadsheet_key = "17TSibAziP_oLHo0jMynpb1LZc7yfWQs78hb-Z5DOaNE"
     
-    with st.spinner("Memuat data..."):
+    with st.spinner("🔄 Loading data from Google Sheets..."):
         try:
-            # Ambil semua data yang diperlukan dalam satu kali panggilan
-            all_data = {
-                "tabel_profil_wf": fetch_sheet_data(client_func, spreadsheet_key, "Tabel WF", "A1:F37"),
-                "tabel_wf": fetch_sheet_data(client_func, spreadsheet_key, "Tabel WF", "b1:W37"),
-                "input_template": fetch_sheet_data(client_func, spreadsheet_key, "WF", "C6:F16"),
-                "sendi_template": fetch_sheet_data(client_func, spreadsheet_key, "WF", "C207:F211")
-            }
+            # Test client first
+            client = client_func()
+            if client is None:
+                raise Exception("Failed to create Google Sheets client")
             
-            # Juga simpan referensi ke worksheet untuk update nanti
+            # Load data with progress updates
+            progress_placeholder = st.empty()
+            
+            progress_placeholder.text("📊 Loading profile data...")
+            all_data = {}
+            
+            all_data["tabel_profil_wf"] = fetch_sheet_data(client_func, spreadsheet_key, "Tabel WF", "A1:F37")
+            
+            progress_placeholder.text("📋 Loading WF table data...")
+            all_data["tabel_wf"] = fetch_sheet_data(client_func, spreadsheet_key, "Tabel WF", "b1:W37")
+            
+            progress_placeholder.text("⚙️ Loading input templates...")
+            all_data["input_template"] = fetch_sheet_data(client_func, spreadsheet_key, "WF", "C6:F16")
+            all_data["sendi_template"] = fetch_sheet_data(client_func, spreadsheet_key, "WF", "C207:F211")
+            
+            progress_placeholder.text("🔗 Getting worksheet reference...")
             all_data["sheet_wf"] = fetch_sheet_data(client_func, spreadsheet_key, "WF")
             
+            progress_placeholder.text("✅ Data loaded successfully!")
+            time.sleep(1)
+            progress_placeholder.empty()
+            
             return all_data
+            
         except Exception as e:
-            st.error(f"Error saat memuat data: {str(e)}")
+            st.error(f"❌ Error loading sheet data: {str(e)}")
+            st.error("**Troubleshooting steps:**")
+            st.error("1. Check your internet connection")
+            st.error("2. Verify the spreadsheet ID is correct")
+            st.error("3. Ensure the worksheet names exist")
+            st.error("4. Check if the service account has access to the spreadsheet")
             raise
 
-# Load semua data di awal
+# Load all data at startup with better error handling
 try:
-    with st.spinner("Menghubungkan ke database..."):
+    with st.spinner("🚀 Initializing application..."):
         all_sheet_data = load_all_sheet_data()
         sheet_wf = all_sheet_data["sheet_wf"]
         
@@ -133,9 +198,25 @@ try:
                                          columns=["Parameter", "Simbol", "Nilai", "Satuan"])
         sendi_df_template = pd.DataFrame(all_sheet_data["sendi_template"], 
                                          columns=["Parameter", "Simbol", "Nilai", "Satuan"])
+        
+        st.success("🎉 Application initialized successfully!")
+        
 except Exception as e:
-    st.error(f"Error saat memuat data: {str(e)}")
-    st.error("Periksa koneksi internet dan coba lagi.")
+    st.error(f"💥 Critical error during initialization: {str(e)}")
+    st.error("**Please check the following:**")
+    st.error("1. Your Streamlit secrets are correctly configured")
+    st.error("2. Your service account has the necessary permissions")
+    st.error("3. The Google Sheets API is enabled in your Google Cloud project")
+    st.error("4. Your internet connection is stable")
+    
+    # Show debug button
+    if st.button("🔍 Show Debug Information"):
+        st.write("**Environment Debug:**")
+        st.write(f"Python version: {os.sys.version}")
+        st.write(f"Available environment variables: {sorted(os.environ.keys())}")
+        if hasattr(st, 'secrets'):
+            st.write(f"Streamlit secrets keys: {list(st.secrets.keys())}")
+    
     st.stop()
 
 # ========== SESSION STATE INITIALIZATION ==========
@@ -169,7 +250,6 @@ def on_profil_change():
 # ========== FORMAT ANGKA ==========
 def format_angka(val):
     if isinstance(val, pd.DataFrame):
-        # If input is a DataFrame, apply function to all cells
         return val.applymap(lambda x: format_angka(x))
     
     if not val:
@@ -372,10 +452,10 @@ def build_consistent_grid(df_result, key):
     AgGrid(df_result, gridOptions=grid_options, height=height, fit_columns_on_grid_load=False,
            update_mode=GridUpdateMode.NO_UPDATE, allow_unsafe_jscode=True, key=key)
 
-# Fungsi untuk mengambil hasil perhitungan dengan retry
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=60))
+# Improved calculation results function
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_calculation_results():
-    """Retrieve calculation results with retry logic"""
+    """Retrieve calculation results with improved retry logic"""
     try:
         hasil = {
             "tarik_dfbt": sheet_wf.get("C59:I63"),
@@ -393,19 +473,27 @@ def get_calculation_results():
         }
         return hasil
     except Exception as e:
-        st.error(f"Error saat mengambil hasil: {str(e)}")
+        st.error(f"Error retrieving results: {str(e)}")
         raise
 
-# ========== Update Google Sheets Function ==========
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=60))
+# ========== Improved Update Google Sheets Function ==========
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def update_sheet_values(updates):
-    """Update Google Sheet with provided values"""
+    """Update Google Sheet with improved error handling and rate limiting"""
     try:
-        for range_name, values in updates:
+        for i, (range_name, values) in enumerate(updates):
+            st.write(f"Updating range {i+1}/{len(updates)}: {range_name}")
             sheet_wf.update(range_name, values)
-            # Add slight delay to avoid rate limits
-            time.sleep(0.5)
+            # Add delay to avoid rate limits
+            if i < len(updates) - 1:  # Don't wait after the last update
+                time.sleep(1)
         return True
+    except gspread.exceptions.APIError as e:
+        if 'RATE_LIMIT_EXCEEDED' in str(e):
+            st.warning("Rate limit exceeded, waiting before retry...")
+            time.sleep(10)
+        st.error(f"API Error updating sheet: {str(e)}")
+        raise
     except Exception as e:
         st.error(f"Error updating sheet: {str(e)}")
         raise
@@ -417,7 +505,7 @@ can_hitung = (not check_empty(input_values)) and (status_sendi in ["Ya", "Tidak"
 calculate_container = st.container()
 
 with calculate_container:
-    if st.button("Hitung", disabled=not can_hitung or st.session_state.calculating, use_container_width=True):
+    if st.button("🧮 Hitung", disabled=not can_hitung or st.session_state.calculating, use_container_width=True):
         st.session_state.calculating = True
         
         progress_bar = st.progress(0)
@@ -425,7 +513,7 @@ with calculate_container:
         
         try:
             # Collect all updates into a batch
-            progress_text.text("Menyiapkan data...")
+            progress_text.text("📝 Preparing calculation data...")
             progress_bar.progress(10)
             
             updates = []
@@ -436,46 +524,49 @@ with calculate_container:
                 updates.append(("E207:E211", [[v] for v in sendi_values]))
             
             # Update Google Sheets in batch
-            progress_text.text("Mengirim data ke server...")
+            progress_text.text("☁️ Sending data to Google Sheets...")
             progress_bar.progress(30)
             
             update_success = update_sheet_values(updates)
             
             if not update_success:
-                st.error("Gagal mengirim data ke server. Silakan coba lagi.")
+                st.error("Failed to send data to server. Please try again.")
                 st.session_state.calculating = False
                 st.stop()
             
             # Give Google Sheets time to calculate
-            progress_text.text("Menunggu hasil perhitungan...")
+            progress_text.text("⏳ Processing calculations...")
             progress_bar.progress(60)
-            time.sleep(2)  # Wait for Google Sheets calculations
+            time.sleep(3)  # Increased wait time for calculations
             
             # Get all calculation results at once
-            progress_text.text("Mengambil hasil perhitungan...")
+            progress_text.text("📊 Retrieving calculation results...")
             progress_bar.progress(80)
             
             hasil_perhitungan = get_calculation_results()
             st.session_state.hasil_perhitungan = hasil_perhitungan
             
             progress_bar.progress(100)
-            progress_text.text("Perhitungan selesai!")
-            time.sleep(0.5)
+            progress_text.text("✅ Calculation completed successfully!")
+            time.sleep(1)
             progress_text.empty()
             progress_bar.empty()
             
         except Exception as e:
-            st.error(f"Terjadi kesalahan: {str(e)}")
-            st.error("Silakan periksa koneksi internet dan coba lagi.")
+            st.error(f"❌ Calculation failed: {str(e)}")
+            st.error("**Please try the following:**")
+            st.error("1. Check your internet connection")
+            st.error("2. Verify all input values are valid")
+            st.error("3. Wait a moment and try again")
         finally:
             st.session_state.calculating = False
             st.rerun()
 
-# Tampilkan hasil jika ada
+# Display results if available
 if "hasil_perhitungan" in st.session_state and st.session_state.hasil_perhitungan:
     hasil = st.session_state.hasil_perhitungan
     
-    st.header("Hasil Analisis Kekuatan Struktur")
+    st.header("📈 Hasil Analisis Kekuatan Struktur")
     def tampilkan_hasil(judul, result_range, key_suffix):
         if not result_range or len(result_range) < 2:
             st.warning(f"Data {judul} tidak tersedia.")
