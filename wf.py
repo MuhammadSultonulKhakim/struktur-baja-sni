@@ -12,7 +12,7 @@ import json
 # ========== HALAMAN DAN STATE SETUP ==========
 st.set_page_config(page_title="Perhitungan Struktur Baja WF", layout="wide")
 st.title("Perhitungan Struktur Baja WF")
-
+st.write(st.secrets['gcp_service_account'].keys())
 # ========== SETUP GOOGLE SHEETS CLIENT ==========
 @st.cache_resource
 def get_gsheet_client():
